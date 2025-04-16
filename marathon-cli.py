@@ -4,6 +4,7 @@ import json
 import time
 import requests
 import logging
+import pprint
 
 from marathon import (MarathonClient, MarathonApp, MarathonHttpError,
                       MarathonError)
@@ -18,9 +19,10 @@ def get_task_by_version(client, app_id, version):
     Gets the Mesos task using the Marathon version of the deployment.
     """
     logging.debug("Attempting to get task for app version {}".format(version))
-    tasks = client.list_tasks(app_id=marathon_app_id)
+    tasks = client.list_tasks(app_id)
     new_task = None
     for task in tasks:
+        print("Found task: {}".format(task))
         logging.debug("Found task: {}".format(task))
         if task.version == version:
             logging.debug("Task with version {} found!".format(version))
@@ -34,12 +36,25 @@ def print_file_chunk(url, offset, auth):
     Takes a URL pointing to a Mesos file, and an offset, and prints
     the file contents from offset to the end, then returns the new offset.
     """
-    length = requests.get(url, auth=auth, verify=False).json()['offset'] - offset
+    response = requests.get(url, auth=auth, verify=False)
+    try:
+        length = response.json()['offset'] - offset
+    except ValueError:
+        logging.debug("Invalid JSON response received: {} from URL {}, skipping...".format(response, url))
+        length = 0
+    
     offset_params = OFFSET.format(offset, length)
-    data = requests.get(url+offset_params, auth=auth, verify=False).json()['data']
+    response = requests.get(url+offset_params, auth=auth, verify=False)
+    try:
+        data = response.json()['data']
+    except ValueError:
+        logging.debug("Invalid JSON response received: {} from URL {}, skipping...".format(response, url))
+        data = ""
+    
     if data != "":
         for line in data.split('\n')[:-1]:
-            print(line)
+            logging.info("CONTAINER LOG: {}".format(line))
+
     return offset + length
 
 if __name__ == '__main__':
@@ -122,6 +137,10 @@ if __name__ == '__main__':
         logging.error("Failed to connect to Marathon! {}".format(e))
         exit_code = 1
         sys.exit(exit_code)
+    except Exception as ee:
+        logging.error("Failure not related to Marathon connection! {}".format(ee))
+        exit_code = 1
+        sys.exit(exit_code)
 
     logging.info("Deploying application...")
     try:
@@ -129,7 +148,7 @@ if __name__ == '__main__':
     except MarathonHttpError:
         response = client.create_app(marathon_app_id, app_definition)
         version = response.version
-        depolyment_id = response.deployments[0].id
+        deployment_id = response.deployments[0].id
     else:
         response = client.update_app(marathon_app_id, app_definition, force=marathon_force)
         version = response['version']
@@ -145,7 +164,10 @@ if __name__ == '__main__':
     ### Get newly created Mesos task
 
     time.sleep(5)
+    print("starting function get_task_by_version()")
     new_task = get_task_by_version(client, marathon_app_id, version)
+    print("finished function get_task_by_version()")
+    print("new task: ".format(new_task))
 
     if not new_task:
         logging.warn("New task did not start automatically, probably because the application definition did not change, forcing restart...")
@@ -160,6 +182,9 @@ if __name__ == '__main__':
             except requests.exceptions.ConnectionError as e:
                 logging.warn("Marathon connection error, ignoring: {}".format(e))
                 pass
+            except Exception as ee:
+                logging.warn("Not Marathon connection Error, ignoring: {}".format(ee))
+                pass
             else:
                 break
 
@@ -171,6 +196,7 @@ if __name__ == '__main__':
         attempts = 0
         while not new_task and attempts < 10:
             time.sleep(2)
+            print("attempt #: {}".format(attempts))
             new_task = get_task_by_version(client, marathon_app_id, response.json()["version"])
             attempts += 1
 
