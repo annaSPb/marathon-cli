@@ -19,6 +19,8 @@ def get_task_by_version(client, app_id, version):
     Gets the Mesos task using the Marathon version of the deployment.
     """
     logging.debug("Attempting to get task for app version {}".format(version))
+    print("app_id passed to function: {}".format(app_id))
+    print("version passed to function: {}".format(version))
     tasks = client.list_tasks(app_id)
     new_task = None
     for task in tasks:
@@ -29,6 +31,7 @@ def get_task_by_version(client, app_id, version):
             new_task = task
     if not new_task:
         logging.debug("Failed to find task for version {}".format(version))
+        print("Failed to find task for version {}".format(version))
     return new_task
 
 def print_file_chunk(url, offset, auth):
@@ -125,7 +128,7 @@ if __name__ == '__main__':
 
     ### Setup Logging
     logging.basicConfig(format="%(levelname)-8s [[[%(message)s]]]", level=getattr(logging, log_level.upper()))
-    logging.getLogger('marathon').setLevel(logging.WARN) # INFO is too chatty
+    logging.getLogger('marathon').setLevel(logging.DEBUG) # INFO is too chatty
 
     logging.info("Parsing JSON app definition...")
     app_definition = MarathonApp.from_json(json.loads(marathon_app))
@@ -197,6 +200,7 @@ if __name__ == '__main__':
         while not new_task and attempts < 10:
             time.sleep(2)
             print("attempt #: {}".format(attempts))
+            print("passing app_id and version:".format(marathon_app_id, response.json()["version"]))
             new_task = get_task_by_version(client, marathon_app_id, response.json()["version"])
             attempts += 1
 
