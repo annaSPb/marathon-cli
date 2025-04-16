@@ -198,9 +198,9 @@ if __name__ == '__main__':
 
         attempts = 0
         while not new_task and attempts < 10:
-            time.sleep(2)
+            time.sleep(20)
             print("attempt #: {}".format(attempts))
-            print("passing app_id and version:".format(marathon_app_id, response.json()["version"]))
+            print("passing app_id and version: {} {}".format(marathon_app_id, response.json()["version"]))
             new_task = get_task_by_version(client, marathon_app_id, response.json()["version"])
             attempts += 1
 
